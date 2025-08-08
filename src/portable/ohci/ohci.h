@@ -108,8 +108,7 @@ typedef struct TU_ATTR_ALIGNED(16)
 	      // HCD: make use of 5 reserved bits
 	uint32_t used              : 1;
 	uint32_t is_interrupt_xfer : 1;
-	uint32_t is_stalled        : 1;
-	uint32_t                   : 2;
+	uint32_t                   : 3;
 
 	// Word 1
 	uint32_t td_tail;

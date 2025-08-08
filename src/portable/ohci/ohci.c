@@ -578,7 +578,6 @@ bool hcd_edpt_clear_stall(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr) {
   (void) rhport;
   ohci_ed_t * const p_ed = ed_from_addr(dev_addr, ep_addr);
 
-  p_ed->is_stalled = 0;
   p_ed->td_tail    &= 0x0Ful; // set tail pointer back to NULL
 
   p_ed->td_head.toggle = 0; // reset data toggle
@@ -681,7 +680,6 @@ static void done_queue_isr(uint8_t hostid)
       {
         ed->td_tail &= 0x0Ful;
         ed->td_tail |= tu_align16(ed->td_head.address); // mark halted EP as empty queue
-        if ( event == XFER_RESULT_STALLED ) ed->is_stalled = 1;
       }
 
       uint8_t dir = (ed->ep_number == 0) ? (qtd->pid == PID_IN) : (ed->pid == PID_IN);
