@@ -41,6 +41,8 @@
 #include "host/usbh.h"
 #include "ohci.h"
 
+#include <pbdrv/cache.h>
+
 //--------------------------------------------------------------------+
 // MACRO CONSTANT TYPEDEF
 //--------------------------------------------------------------------+
@@ -140,6 +142,10 @@ enum {
   PID_FROM_TD = 0,
 };
 
+// weak dcache for non-cacheable MCU
+TU_ATTR_WEAK bool hcd_dcache_clean(void const* addr, uint32_t data_size) { (void) addr; (void) data_size; return true; }
+TU_ATTR_WEAK bool hcd_dcache_invalidate(void const* addr, uint32_t data_size) { (void) addr; (void) data_size; return true; }
+
 //--------------------------------------------------------------------+
 // INTERNAL OBJECT & FUNCTION DECLARATION
 //--------------------------------------------------------------------+
@@ -212,6 +218,8 @@ bool hcd_init(uint8_t rhport, const tusb_rhport_init_t* rh_init) {
     osal_task_delay(20);
 #endif
   }
+
+  hcd_dcache_clean(&ohci_data, sizeof(ohci_data));
 
   // reset controller
   OHCI_REG->command_status_bit.controller_reset = 1;
@@ -515,6 +523,13 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
 
   uint8_t const epnum = tu_edpt_number(ep_addr);
   uint8_t const dir   = tu_edpt_dir(ep_addr);
+
+  // IN transfer: invalidate buffer, OUT transfer: clean buffer
+  if (dir) {
+    hcd_dcache_invalidate(buffer, buflen);
+  }else {
+    hcd_dcache_clean(buffer, buflen);
+  }
 
   if ( epnum == 0 )
   {
