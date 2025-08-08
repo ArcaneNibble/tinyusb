@@ -587,8 +587,6 @@ bool hcd_edpt_clear_stall(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr) {
   (void) rhport;
   ohci_ed_t * const p_ed = ed_from_addr(dev_addr, ep_addr);
 
-  p_ed->td_tail    &= 0x0Ful; // set tail pointer back to NULL
-
   p_ed->td_head.toggle = 0; // reset data toggle
   p_ed->td_head.halted = 0;
 
