@@ -578,7 +578,7 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
 
     PBDRV_UNCACHED(ed->td_tail) = (uint32_t)_phys_addr(new_gtd);
 
-    tusb_xfer_type_t xfer_type = ed_get_xfer_type( ed_from_addr(dev_addr, ep_addr)->w0 );
+    tusb_xfer_type_t xfer_type = ed_get_xfer_type( PBDRV_UNCACHED(ed->w0) );
     if (TUSB_XFER_BULK == xfer_type) OHCI_REG->command_status_bit.bulk_list_filled = 1;
   }
 
