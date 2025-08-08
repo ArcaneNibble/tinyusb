@@ -351,7 +351,6 @@ static void ed_init(ohci_ed_t *p_ed, uint8_t dev_addr, uint16_t ep_size, uint8_t
 static void gtd_init(ohci_gtd_t *p_td, uint8_t *data_ptr, uint16_t total_bytes) {
   tu_memclr(p_td, sizeof(ohci_gtd_t));
 
-  gtd_get_extra_data(p_td)->used = 1;
   gtd_get_extra_data(p_td)->expected_bytes = total_bytes;
 
   p_td->buffer_rounding = 1; // less than queued length is not a error
@@ -435,23 +434,13 @@ static ohci_gtd_t * gtd_find_free(void)
 {
   for(uint8_t i=0; i < GTD_MAX; i++)
   {
-    if ( !ohci_data.gtd_extra[i].used ) return &ohci_data.gtd_pool[i];
+    if ( !ohci_data.gtd_extra[i].used ) {
+      ohci_data.gtd_extra[i].used = 1;
+      return &ohci_data.gtd_pool[i];
+    }
   }
 
   return NULL;
-}
-
-static void td_insert_to_ed(ohci_ed_t* p_ed, ohci_gtd_t * p_gtd)
-{
-  // tail is always NULL
-  if ( tu_align16(p_ed->td_head.address) == 0 )
-  { // TD queue is empty --> head = TD
-    p_ed->td_head.address |= (uint32_t) _phys_addr(p_gtd);
-  }
-  else
-  { // TODO currently only support queue up to 2 TD each endpoint at a time
-    ((ohci_gtd_t*) tu_align16((uint32_t)_virt_addr((void *)p_ed->td_head.address)))->next = (uint32_t) _phys_addr(p_gtd);
-  }
 }
 
 //--------------------------------------------------------------------+
@@ -484,6 +473,15 @@ bool hcd_edpt_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_endpoint_t const 
   {
     p_ed->skip = 0; // only need to clear skip bit
     return true;
+  }
+
+  if ( tu_edpt_number(ep_desc->bEndpointAddress) != 0 ) {
+    // Get an empty TD to be used as the end of list.
+    // It will be used for the next transfer on this EP.
+    ohci_gtd_t* gtd = gtd_find_free();
+    TU_ASSERT(gtd);
+    p_ed->td_head.address = (uint32_t)_phys_addr(gtd);
+    p_ed->td_tail = (uint32_t)_phys_addr(gtd);
   }
 
   ed_list_insert( p_ed_head[ep_desc->bmAttributes.xfer], p_ed );
@@ -544,6 +542,7 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
     gtd->pid             = dir ? PID_IN : PID_OUT;
     gtd->data_toggle     = GTD_DT_DATA1; // Both Data and Ack stage start with DATA1
     gtd->delay_interrupt = OHCI_INT_ON_COMPLETE_YES;
+    hcd_dcache_clean(gtd, sizeof(ohci_gtd_t));
 
     ed->td_head.address = (uint32_t) _phys_addr(gtd);
 
@@ -551,9 +550,8 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
   }else
   {
     ohci_ed_t * ed = ed_from_addr(dev_addr, ep_addr);
-    ohci_gtd_t* gtd = gtd_find_free();
-
-    TU_ASSERT(gtd);
+    ohci_gtd_t *gtd = (ohci_gtd_t *)_virt_addr((void *)ed->td_tail);
+    TU_LOG(3, "OHCI xfer dev %d ep %02x td %08x\r\n", dev_addr, ep_addr, gtd);
 
     gtd_init(gtd, buffer, buflen);
     gtd_get_extra_data(gtd)->dev_addr = dev_addr;
@@ -561,7 +559,14 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
 
     gtd->delay_interrupt = OHCI_INT_ON_COMPLETE_YES;
 
-    td_insert_to_ed(ed, gtd);
+    // Insert a new, empty TD at the tail
+    ohci_gtd_t* new_gtd = gtd_find_free();
+    TU_ASSERT(new_gtd);
+
+    gtd->next = (uint32_t)_phys_addr(new_gtd);
+    hcd_dcache_clean(gtd, sizeof(ohci_gtd_t));
+
+    ed->td_tail = (uint32_t)_phys_addr(new_gtd);
 
     tusb_xfer_type_t xfer_type = ed_get_xfer_type( ed_from_addr(dev_addr, ep_addr) );
     if (TUSB_XFER_BULK == xfer_type) OHCI_REG->command_status_bit.bulk_list_filled = 1;
