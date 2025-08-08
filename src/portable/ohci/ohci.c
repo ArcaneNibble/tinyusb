@@ -608,6 +608,8 @@ static ohci_td_item_t* list_reverse(ohci_td_item_t* td_head)
   while(td_head != NULL)
   {
     td_head = _virt_addr(td_head);
+    // FIXME: This "works" in the normal setup but is not the actual correct size to pass
+    hcd_dcache_invalidate(td_head, sizeof(ohci_td_item_t));
     uint32_t next = td_head->next;
 
     // make current's item become reverse's first item
