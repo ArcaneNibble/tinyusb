@@ -61,6 +61,8 @@ typedef struct {
 
 TU_VERIFY_STATIC( sizeof(ohci_hcca_t) == 256, "size is not correct" );
 
+TU_VERIFY_STATIC( (CFG_TUH_MEM_DCACHE_ENABLE ? CFG_TUH_MEM_DCACHE_LINE_SIZE : 0) % 32 == 0, "cache line not multiple of 32" );
+
 // common link item for gtd and itd for list travel
 // use as pointer only
 typedef struct TU_ATTR_ALIGNED(16) {
@@ -69,7 +71,7 @@ typedef struct TU_ATTR_ALIGNED(16) {
   uint32_t reserved2;
 }ohci_td_item_t;
 
-typedef struct TU_ATTR_ALIGNED(16)
+typedef struct TU_ATTR_ALIGNED(CFG_TUH_MEM_DCACHE_ENABLE ? CFG_TUH_MEM_DCACHE_LINE_SIZE : 16)
 {
 	// Word 0
 	uint32_t used                    : 1;
@@ -92,7 +94,7 @@ typedef struct TU_ATTR_ALIGNED(16)
 	uint8_t* buffer_end;
 } ohci_gtd_t;
 
-TU_VERIFY_STATIC( sizeof(ohci_gtd_t) == 16, "size is not correct" );
+TU_VERIFY_STATIC( sizeof(ohci_gtd_t) == CFG_TUH_MEM_DCACHE_ENABLE ? CFG_TUH_MEM_DCACHE_LINE_SIZE : 16, "size is not correct" );
 
 typedef struct TU_ATTR_ALIGNED(16)
 {
@@ -129,7 +131,7 @@ typedef struct TU_ATTR_ALIGNED(16)
 
 TU_VERIFY_STATIC( sizeof(ohci_ed_t) == 16, "size is not correct" );
 
-typedef struct TU_ATTR_ALIGNED(32)
+typedef struct TU_ATTR_ALIGNED(CFG_TUH_MEM_DCACHE_ENABLE ? CFG_TUH_MEM_DCACHE_LINE_SIZE : 32)
 {
 	/*---------- Word 1 ----------*/
   uint32_t starting_frame          : 16;
@@ -152,7 +154,7 @@ typedef struct TU_ATTR_ALIGNED(32)
 	volatile uint16_t offset_packetstatus[8];
 } ochi_itd_t;
 
-TU_VERIFY_STATIC( sizeof(ochi_itd_t) == 32, "size is not correct" );
+TU_VERIFY_STATIC( sizeof(ochi_itd_t) == CFG_TUH_MEM_DCACHE_ENABLE ? CFG_TUH_MEM_DCACHE_LINE_SIZE : 32, "size is not correct" );
 
 typedef struct {
   uint16_t expected_bytes; // up to 8192 bytes so max is 13 bits
