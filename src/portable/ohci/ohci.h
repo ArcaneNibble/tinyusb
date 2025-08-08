@@ -111,6 +111,15 @@ typedef union {
   uint32_t u;
 } ohci_ed_word0;
 
+typedef union {
+  uint32_t address;
+  struct {
+    uint32_t halted : 1;
+    uint32_t toggle : 1;
+    uint32_t : 30;
+  };
+} ohci_ed_td_head;
+
 typedef struct TU_ATTR_ALIGNED(16)
 {
   // Word 0
@@ -120,14 +129,7 @@ typedef struct TU_ATTR_ALIGNED(16)
 	uint32_t td_tail;
 
 	// Word 2
-	volatile union {
-		uint32_t address;
-		struct {
-			uint32_t halted : 1;
-			uint32_t toggle : 1;
-			uint32_t : 30;
-		};
-	} td_head;
+	volatile ohci_ed_td_head td_head;
 
 	// Word 3: next ED
 	uint32_t next;

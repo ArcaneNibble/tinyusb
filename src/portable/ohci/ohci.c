@@ -294,7 +294,7 @@ void hcd_device_close(uint8_t rhport, uint8_t dev_addr)
   // addr0 serves as static head --> only set skip bit
   if ( dev_addr == 0 )
   {
-    ohci_data.control[0].ed.w0.skip = 1;
+    PBDRV_UNCACHED(ohci_data.control[0].ed.w0).skip = 1;
   }else
   {
     // remove control
@@ -331,7 +331,9 @@ static void ed_init(ohci_ed_t *p_ed, uint8_t dev_addr, uint16_t ep_size, uint8_t
   // address 0 is used as async head, which always on the list --> cannot be cleared
   if (dev_addr != 0)
   {
-    tu_memclr(p_ed, sizeof(ohci_ed_t));
+    PBDRV_UNCACHED(p_ed->td_tail) = 0;
+    PBDRV_UNCACHED(p_ed->td_head).address = 0;
+    PBDRV_UNCACHED(p_ed->next) = 0;
   }
 
   tuh_bus_info_t bus_info;
@@ -347,7 +349,7 @@ static void ed_init(ohci_ed_t *p_ed, uint8_t dev_addr, uint16_t ep_size, uint8_t
 
   w0.used              = 1;
   w0.is_interrupt_xfer = (xfer_type == TUSB_XFER_INTERRUPT ? 1 : 0);
-  p_ed->w0 = w0;
+  PBDRV_UNCACHED(p_ed->w0) = w0;
 }
 
 static void gtd_init(ohci_gtd_t *p_td, uint8_t *data_ptr, uint16_t total_bytes) {
@@ -377,8 +379,9 @@ static ohci_ed_t * ed_from_addr(uint8_t dev_addr, uint8_t ep_addr)
 
   for(uint32_t i=0; i<ED_MAX; i++)
   {
-    if ( (ed_pool[i].w0.dev_addr == dev_addr) &&
-          ep_addr == tu_edpt_addr(ed_pool[i].w0.ep_number, ed_pool[i].w0.pid == PID_IN) )
+    ohci_ed_word0 w0 = PBDRV_UNCACHED(ed_pool[i].w0);
+    if ( (w0.dev_addr == dev_addr) &&
+          ep_addr == tu_edpt_addr(w0.ep_number, w0.pid == PID_IN) )
     {
       return &ed_pool[i];
     }
@@ -393,7 +396,7 @@ static ohci_ed_t * ed_find_free(void)
 
   for(uint8_t i = 0; i < ED_MAX; i++)
   {
-    if ( !ed_pool[i].w0.used ) return &ed_pool[i];
+    if ( !PBDRV_UNCACHED(ed_pool[i].w0).used ) return &ed_pool[i];
   }
 
   return NULL;
@@ -401,33 +404,38 @@ static ohci_ed_t * ed_find_free(void)
 
 static void ed_list_insert(ohci_ed_t * p_pre, ohci_ed_t * p_ed)
 {
-  p_ed->next = p_pre->next;
-  p_pre->next = (uint32_t) _phys_addr(p_ed);
+  PBDRV_UNCACHED(p_ed->next) = PBDRV_UNCACHED(p_pre->next);
+  PBDRV_UNCACHED(p_pre->next) = (uint32_t) _phys_addr(p_ed);
 }
 
 static void ed_list_remove_by_addr(ohci_ed_t * p_head, uint8_t dev_addr)
 {
   ohci_ed_t* p_prev = p_head;
 
-  while( p_prev->next )
+  uint32_t ed_pa;
+  while( (ed_pa = PBDRV_UNCACHED(p_prev->next)) )
   {
-    ohci_ed_t* ed = (ohci_ed_t*) _virt_addr((void *)p_prev->next);
+    ohci_ed_t* ed = (ohci_ed_t*) _virt_addr((void *)ed_pa);
 
-    if (ed->w0.dev_addr == dev_addr)
+    if (PBDRV_UNCACHED(ed->w0).dev_addr == dev_addr)
     {
       // Prevent Host Controller from processing this ED while we remove it
-      ed->w0.skip = 1;
+      PBDRV_UNCACHED(ed->w0).skip = 1;
 
       // unlink ed, will also move up p_prev
-      p_prev->next = ed->next;
+      PBDRV_UNCACHED(p_prev->next) = PBDRV_UNCACHED(ed->next);
 
       // point the removed ED's next pointer to list head to make sure HC can always safely move away from this ED
-      ed->next = (uint32_t) _phys_addr(p_head);
-      ed->w0.used = 0;
-      ed->w0.skip = 0;
+      PBDRV_UNCACHED(ed->next) = (uint32_t) _phys_addr(p_head);
+      ohci_ed_word0 w0 = PBDRV_UNCACHED(ed->w0);
+      w0.used = 0;
+      w0.skip = 0;
+      PBDRV_UNCACHED(ed->w0) = w0;
+
+      // FIXME: Does ED reclaim actually work right now?
     }else
     {
-      p_prev = (ohci_ed_t*) _virt_addr((void *)p_prev->next);
+      p_prev = (ohci_ed_t*) _virt_addr((void *)ed_pa);
     }
   }
 }
@@ -473,7 +481,7 @@ bool hcd_edpt_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_endpoint_t const 
   // control of dev0 is used as static async head
   if ( dev_addr == 0 )
   {
-    p_ed->w0.skip = 0; // only need to clear skip bit
+    PBDRV_UNCACHED(p_ed->w0).skip = 0; // only need to clear skip bit
     return true;
   }
 
@@ -482,8 +490,8 @@ bool hcd_edpt_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_endpoint_t const 
     // It will be used for the next transfer on this EP.
     ohci_gtd_t* gtd = gtd_find_free();
     TU_ASSERT(gtd);
-    p_ed->td_head.address = (uint32_t)_phys_addr(gtd);
-    p_ed->td_tail = (uint32_t)_phys_addr(gtd);
+    PBDRV_UNCACHED(p_ed->td_head).address = (uint32_t)_phys_addr(gtd);
+    PBDRV_UNCACHED(p_ed->td_tail) = (uint32_t)_phys_addr(gtd);
   }
 
   ed_list_insert( p_ed_head[ep_desc->bmAttributes.xfer], p_ed );
@@ -509,9 +517,10 @@ bool hcd_setup_send(uint8_t rhport, uint8_t dev_addr, uint8_t const setup_packet
   qtd->pid             = PID_SETUP;
   qtd->data_toggle     = GTD_DT_DATA0;
   qtd->delay_interrupt = OHCI_INT_ON_COMPLETE_YES;
+  hcd_dcache_clean(qtd, sizeof(ohci_gtd_t));
 
   //------------- Attach TDs list to Control Endpoint -------------//
-  ed->td_head.address = (uint32_t) _phys_addr(qtd);
+  PBDRV_UNCACHED(ed->td_head.address) = (uint32_t) _phys_addr(qtd);
 
   OHCI_REG->command_status_bit.control_list_filled = 1;
 
@@ -546,13 +555,13 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
     gtd->delay_interrupt = OHCI_INT_ON_COMPLETE_YES;
     hcd_dcache_clean(gtd, sizeof(ohci_gtd_t));
 
-    ed->td_head.address = (uint32_t) _phys_addr(gtd);
+    PBDRV_UNCACHED(ed->td_head).address = (uint32_t) _phys_addr(gtd);
 
     OHCI_REG->command_status_bit.control_list_filled = 1;
   }else
   {
     ohci_ed_t * ed = ed_from_addr(dev_addr, ep_addr);
-    ohci_gtd_t *gtd = (ohci_gtd_t *)_virt_addr((void *)ed->td_tail);
+    ohci_gtd_t *gtd = (ohci_gtd_t *)_virt_addr((void *)PBDRV_UNCACHED(ed->td_tail));
 
     gtd_init(gtd, buffer, buflen);
     gtd_get_extra_data(gtd)->dev_addr = dev_addr;
@@ -567,7 +576,7 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
     gtd->next = (uint32_t)_phys_addr(new_gtd);
     hcd_dcache_clean(gtd, sizeof(ohci_gtd_t));
 
-    ed->td_tail = (uint32_t)_phys_addr(new_gtd);
+    PBDRV_UNCACHED(ed->td_tail) = (uint32_t)_phys_addr(new_gtd);
 
     tusb_xfer_type_t xfer_type = ed_get_xfer_type( ed_from_addr(dev_addr, ep_addr)->w0 );
     if (TUSB_XFER_BULK == xfer_type) OHCI_REG->command_status_bit.bulk_list_filled = 1;
@@ -588,10 +597,12 @@ bool hcd_edpt_clear_stall(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr) {
   (void) rhport;
   ohci_ed_t * const p_ed = ed_from_addr(dev_addr, ep_addr);
 
-  p_ed->td_head.toggle = 0; // reset data toggle
-  p_ed->td_head.halted = 0;
+  ohci_ed_td_head td_head = PBDRV_UNCACHED(p_ed->td_head);
+  td_head.toggle = 0; // reset data toggle
+  td_head.halted = 0;
+  PBDRV_UNCACHED(p_ed->td_head) = td_head;
 
-  if ( TUSB_XFER_BULK == ed_get_xfer_type(p_ed->w0) ) OHCI_REG->command_status_bit.bulk_list_filled = 1;
+  if ( TUSB_XFER_BULK == ed_get_xfer_type(PBDRV_UNCACHED(p_ed->w0)) ) OHCI_REG->command_status_bit.bulk_list_filled = 1;
 
   return true;
 }
@@ -651,7 +662,7 @@ static void done_queue_isr(uint8_t hostid)
   (void) hostid;
 
   // done head is written in reversed order of completion --> need to reverse the done queue first
-  ohci_td_item_t* td_head = list_reverse ( (ohci_td_item_t*) tu_align16(ohci_data.hcca.done_head) );
+  ohci_td_item_t* td_head = list_reverse ( (ohci_td_item_t*) tu_align16(PBDRV_UNCACHED(ohci_data.hcca).done_head) );
   ohci_data.hcca.done_head = 0;
 
   while( td_head != NULL )
