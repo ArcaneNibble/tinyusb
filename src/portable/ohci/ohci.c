@@ -675,20 +675,6 @@ static void done_queue_isr(uint8_t hostid)
     {
       uint32_t const xferred_bytes = gtd_get_extra_data(qtd)->expected_bytes - gtd_xfer_byte_left((uint32_t) qtd->buffer_end, (uint32_t) qtd->current_buffer_pointer);
 
-      // NOTE Assuming the current list is BULK and there is no other EDs in the list has queued TDs.
-      // When there is a error resulting this ED is halted, and this EP still has other queued TD
-      // --> the Bulk list only has this halted EP queueing TDs (remaining)
-      // --> Bulk list will be considered as not empty by HC !!! while there is no attempt transaction on this list
-      // --> HC will not process Control list (due to service ratio when Bulk list not empty)
-      // To walk-around this, the halted ED will have TailP = HeadP (empty list condition), when clearing halt
-      // the TailP must be set back to NULL for processing remaining TDs
-      if (event != XFER_RESULT_SUCCESS)
-      {
-        ohci_ed_t * const ed  = gtd_get_ed(qtd);
-        ed->td_tail &= 0x0Ful;
-        ed->td_tail |= tu_align16(ed->td_head.address); // mark halted EP as empty queue
-      }
-
       hcd_event_xfer_complete(gtd_get_extra_data(qtd)->dev_addr, gtd_get_extra_data(qtd)->ep_addr, xferred_bytes, event, true);
     }
 
