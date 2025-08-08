@@ -506,7 +506,6 @@ bool hcd_setup_send(uint8_t rhport, uint8_t dev_addr, uint8_t const setup_packet
   gtd_init(qtd, (uint8_t*)(uintptr_t) setup_packet, 8);
   gtd_get_extra_data(qtd)->dev_addr = dev_addr;
   gtd_get_extra_data(qtd)->ep_addr  = tu_edpt_addr(0, TUSB_DIR_OUT);
-  qtd->index           = dev_addr;
   qtd->pid             = PID_SETUP;
   qtd->data_toggle     = GTD_DT_DATA0;
   qtd->delay_interrupt = OHCI_INT_ON_COMPLETE_YES;
@@ -542,7 +541,6 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
     gtd_get_extra_data(gtd)->dev_addr = dev_addr;
     gtd_get_extra_data(gtd)->ep_addr  = ep_addr;
 
-    gtd->index           = dev_addr;
     gtd->pid             = dir ? PID_IN : PID_OUT;
     gtd->data_toggle     = GTD_DT_DATA1; // Both Data and Ack stage start with DATA1
     gtd->delay_interrupt = OHCI_INT_ON_COMPLETE_YES;
@@ -561,7 +559,6 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
     gtd_get_extra_data(gtd)->dev_addr = dev_addr;
     gtd_get_extra_data(gtd)->ep_addr  = ep_addr;
 
-    gtd->index = ed-ohci_data.ed_pool;
     gtd->delay_interrupt = OHCI_INT_ON_COMPLETE_YES;
 
     td_insert_to_ed(ed, gtd);
@@ -621,17 +618,6 @@ static ohci_td_item_t* list_reverse(ohci_td_item_t* td_head)
 static inline bool gtd_is_control(ohci_gtd_t const * const p_qtd)
 {
   return ((uint32_t) p_qtd) < ((uint32_t) ohci_data.gtd_pool); // check ohci_data_t for memory layout
-}
-
-static inline ohci_ed_t* gtd_get_ed(ohci_gtd_t const * const p_qtd)
-{
-  if ( gtd_is_control(p_qtd) )
-  {
-    return &ohci_data.control[p_qtd->index].ed;
-  }else
-  {
-    return &ohci_data.ed_pool[p_qtd->index];
-  }
 }
 
 static gtd_extra_data_t *gtd_get_extra_data(ohci_gtd_t const * const gtd) {

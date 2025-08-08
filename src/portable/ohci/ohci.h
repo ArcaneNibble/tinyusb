@@ -74,8 +74,7 @@ typedef struct TU_ATTR_ALIGNED(16) {
 typedef struct TU_ATTR_ALIGNED(CFG_TUH_MEM_DCACHE_ENABLE ? CFG_TUH_MEM_DCACHE_LINE_SIZE : 16)
 {
 	// Word 0
-  uint32_t index                   : 8;  // endpoint index the gtd belongs to, or device address in case of control xfer
-  uint32_t                         : 10; // can be used
+  uint32_t                         : 18; // can be used
   uint32_t buffer_rounding         : 1;
   uint32_t pid                     : 2;
   uint32_t delay_interrupt         : 3;
