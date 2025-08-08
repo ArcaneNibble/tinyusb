@@ -351,7 +351,7 @@ static void ed_init(ohci_ed_t *p_ed, uint8_t dev_addr, uint16_t ep_size, uint8_t
 static void gtd_init(ohci_gtd_t *p_td, uint8_t *data_ptr, uint16_t total_bytes) {
   tu_memclr(p_td, sizeof(ohci_gtd_t));
 
-  p_td->used = 1;
+  gtd_get_extra_data(p_td)->used = 1;
   gtd_get_extra_data(p_td)->expected_bytes = total_bytes;
 
   p_td->buffer_rounding = 1; // less than queued length is not a error
@@ -435,7 +435,7 @@ static ohci_gtd_t * gtd_find_free(void)
 {
   for(uint8_t i=0; i < GTD_MAX; i++)
   {
-    if ( !ohci_data.gtd_pool[i].used ) return &ohci_data.gtd_pool[i];
+    if ( !ohci_data.gtd_extra[i].used ) return &ohci_data.gtd_pool[i];
   }
 
   return NULL;
@@ -664,7 +664,7 @@ static void done_queue_isr(uint8_t hostid)
     xfer_result_t const event = (qtd->condition_code == OHCI_CCODE_NO_ERROR) ? XFER_RESULT_SUCCESS :
                                 (qtd->condition_code == OHCI_CCODE_STALL) ? XFER_RESULT_STALLED : XFER_RESULT_FAILED;
 
-    qtd->used = 0; // free TD
+    gtd_get_extra_data(qtd)->used = 0; // free TD
     if ( (qtd->delay_interrupt == OHCI_INT_ON_COMPLETE_YES) || (event != XFER_RESULT_SUCCESS) )
     {
       ohci_ed_t * const ed  = gtd_get_ed(qtd);
