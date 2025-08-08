@@ -551,7 +551,6 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
   {
     ohci_ed_t * ed = ed_from_addr(dev_addr, ep_addr);
     ohci_gtd_t *gtd = (ohci_gtd_t *)_virt_addr((void *)ed->td_tail);
-    TU_LOG(3, "OHCI xfer dev %d ep %02x td %08x\r\n", dev_addr, ep_addr, gtd);
 
     gtd_init(gtd, buffer, buflen);
     gtd_get_extra_data(gtd)->dev_addr = dev_addr;
