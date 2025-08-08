@@ -156,8 +156,11 @@ TU_VERIFY_STATIC( sizeof(ochi_itd_t) == CFG_TUH_MEM_DCACHE_ENABLE ? CFG_TUH_MEM_
 
 typedef struct {
   uint16_t expected_bytes; // up to 8192 bytes so max is 13 bits
-  uint8_t used;
+  uint8_t dev_addr  : 7;
+  uint8_t used      : 1;
+  uint8_t ep_addr;
 } gtd_extra_data_t;
+TU_VERIFY_STATIC( sizeof(gtd_extra_data_t) == 4, "size is not correct" );
 
 // structure with member alignment required from large to small
 typedef struct TU_ATTR_ALIGNED(256) {

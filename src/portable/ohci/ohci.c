@@ -504,6 +504,8 @@ bool hcd_setup_send(uint8_t rhport, uint8_t dev_addr, uint8_t const setup_packet
   ohci_gtd_t *qtd = &ohci_data.control[dev_addr].gtd;
 
   gtd_init(qtd, (uint8_t*)(uintptr_t) setup_packet, 8);
+  gtd_get_extra_data(qtd)->dev_addr = dev_addr;
+  gtd_get_extra_data(qtd)->ep_addr  = tu_edpt_addr(0, TUSB_DIR_OUT);
   qtd->index           = dev_addr;
   qtd->pid             = PID_SETUP;
   qtd->data_toggle     = GTD_DT_DATA0;
@@ -537,6 +539,8 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
     ohci_gtd_t* gtd = &ohci_data.control[dev_addr].gtd;
 
     gtd_init(gtd, buffer, buflen);
+    gtd_get_extra_data(gtd)->dev_addr = dev_addr;
+    gtd_get_extra_data(gtd)->ep_addr  = ep_addr;
 
     gtd->index           = dev_addr;
     gtd->pid             = dir ? PID_IN : PID_OUT;
@@ -554,6 +558,9 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
     TU_ASSERT(gtd);
 
     gtd_init(gtd, buffer, buflen);
+    gtd_get_extra_data(gtd)->dev_addr = dev_addr;
+    gtd_get_extra_data(gtd)->ep_addr  = ep_addr;
+
     gtd->index = ed-ohci_data.ed_pool;
     gtd->delay_interrupt = OHCI_INT_ON_COMPLETE_YES;
 
@@ -666,7 +673,6 @@ static void done_queue_isr(uint8_t hostid)
     gtd_get_extra_data(qtd)->used = 0; // free TD
     if ( (qtd->delay_interrupt == OHCI_INT_ON_COMPLETE_YES) || (event != XFER_RESULT_SUCCESS) )
     {
-      ohci_ed_t * const ed  = gtd_get_ed(qtd);
       uint32_t const xferred_bytes = gtd_get_extra_data(qtd)->expected_bytes - gtd_xfer_byte_left((uint32_t) qtd->buffer_end, (uint32_t) qtd->current_buffer_pointer);
 
       // NOTE Assuming the current list is BULK and there is no other EDs in the list has queued TDs.
@@ -678,13 +684,12 @@ static void done_queue_isr(uint8_t hostid)
       // the TailP must be set back to NULL for processing remaining TDs
       if (event != XFER_RESULT_SUCCESS)
       {
+        ohci_ed_t * const ed  = gtd_get_ed(qtd);
         ed->td_tail &= 0x0Ful;
         ed->td_tail |= tu_align16(ed->td_head.address); // mark halted EP as empty queue
       }
 
-      uint8_t dir = (ed->ep_number == 0) ? (qtd->pid == PID_IN) : (ed->pid == PID_IN);
-
-      hcd_event_xfer_complete(ed->dev_addr, tu_edpt_addr(ed->ep_number, dir), xferred_bytes, event, true);
+      hcd_event_xfer_complete(gtd_get_extra_data(qtd)->dev_addr, gtd_get_extra_data(qtd)->ep_addr, xferred_bytes, event, true);
     }
 
     td_head = (ohci_td_item_t*) _virt_addr((void *)td_head->next);
