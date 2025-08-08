@@ -511,6 +511,8 @@ bool hcd_setup_send(uint8_t rhport, uint8_t dev_addr, uint8_t const setup_packet
   ohci_ed_t* ed   = &ohci_data.control[dev_addr].ed;
   ohci_gtd_t *qtd = &ohci_data.control[dev_addr].gtd;
 
+  hcd_dcache_clean(setup_packet, 8);
+
   gtd_init(qtd, (uint8_t*)(uintptr_t) setup_packet, 8);
   gtd_get_extra_data(qtd)->dev_addr = dev_addr;
   gtd_get_extra_data(qtd)->ep_addr  = tu_edpt_addr(0, TUSB_DIR_OUT);
@@ -561,6 +563,7 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
   }else
   {
     ohci_ed_t * ed = ed_from_addr(dev_addr, ep_addr);
+    tusb_xfer_type_t xfer_type = ed_get_xfer_type( PBDRV_UNCACHED(ed->w0) );
     ohci_gtd_t *gtd = (ohci_gtd_t *)_virt_addr((void *)PBDRV_UNCACHED(ed->td_tail));
 
     gtd_init(gtd, buffer, buflen);
@@ -578,7 +581,6 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
 
     PBDRV_UNCACHED(ed->td_tail) = (uint32_t)_phys_addr(new_gtd);
 
-    tusb_xfer_type_t xfer_type = ed_get_xfer_type( PBDRV_UNCACHED(ed->w0) );
     if (TUSB_XFER_BULK == xfer_type) OHCI_REG->command_status_bit.bulk_list_filled = 1;
   }
 
